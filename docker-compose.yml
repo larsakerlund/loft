@@ -1,0 +1,47 @@
+# Local inner loop: web (nginx serving the root site + user sites, proxying /api) and loftd, plus a
+# Postgres for loft.db. Auth is off (the fast loop), so the site and deploy work without a sign-in;
+# loftd takes the user from LOFT_DEV_USER. web and loftd share ./dev/sites and ./dev/uploads, so a
+# deploy shows up immediately.
+#
+#   docker compose up --build
+#   open http://localhost:8088                      (the root site: drop files, deploy)
+#   open http://<your-site>.localhost:8088
+#
+# Note: this simple setup connects loftd to Postgres as a superuser, so row-level security is not
+# enforced here. RLS / tenant-isolation is exercised by the acceptance suite (test/), which sets up
+# the restricted, non-superuser role the way production does.
+services:
+  web:
+    build: ./web
+    ports:
+      - "8088:8080"
+    volumes:
+      - ./dev/sites:/mnt/loft
+      - ./dev/uploads:/mnt/uploads
+    depends_on:
+      - backend
+
+  backend:
+    build: .
+    environment:
+      - LOFT_DEV=1 # LOCAL DEV ONLY: auth off, hard-coded dev user. loftd refuses the dev user without this.
+      - LOFT_DEV_USER=dev@local|Dev User
+      - LOFT_LISTEN=0.0.0.0:8082
+      - LOFT_UPLOADS_DIR=/mnt/uploads
+      - LOFT_PG_CONNECTION_STRING=postgres://loft:loft@postgres:5432/loft?sslmode=disable
+      - LOFT_CLI_CLIENT_ID=local-cli
+      - LOFT_CLI_SCOPE=openid offline_access
+      # LOFT_SITES_DIR defaults to /mnt/loft (the mount below), so a deploy lands there.
+    volumes:
+      - ./dev/sites:/mnt/loft
+      - ./dev/uploads:/mnt/uploads
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=loft
+      - POSTGRES_PASSWORD=loft
+      - POSTGRES_DB=loft
+    # No host port publish: loftd reaches Postgres over the compose network (postgres:5432).

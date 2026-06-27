@@ -1,0 +1,28 @@
+# llmock fixtures for the loft.ai acceptance tests. Rules are tried top-to-bottom; first match wins.
+# The test prompts contain these marker strings to deterministically drive each upstream behaviour
+# loftd must handle. llmock produces the real provider wire format; loftd only translates it.
+rules:
+  # Upstream returns a 429 → loftd must surface 429 ("ai busy, try again").
+  - match: { user_contains: "ERR429" }
+    error:
+      status: 429
+      type: rate_limit_error
+      message: "Rate limit reached."
+
+  # Any other upstream error (500) → loftd must surface 502 ("ai error").
+  - match: { user_contains: "ERR500" }
+    error:
+      status: 500
+      message: "internal upstream error"
+
+  # Huge completion usage → trips loftd's per-site daily token budget on the NEXT call.
+  - match: { user_contains: "BIGUSAGE" }
+    respond:
+      content: "ok"
+      usage: { prompt_tokens: 1, completion_tokens: 600000 }
+
+  # Default: a small, fixed reply with modest usage (used by the happy-path stream/non-stream tests).
+  - match: {}
+    respond:
+      content: "Hello from llmock."
+      usage: { prompt_tokens: 5, completion_tokens: 5 }

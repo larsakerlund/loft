@@ -1,0 +1,14 @@
+{
+  "name": "loft-acceptance-tests",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "packageManager": "pnpm@11.9.0",
+  "description": "Language-agnostic black-box acceptance suite for the Loft backend + CLI. Pins the contract apps/SDK rely on, so loftd and the CLI can be ported (e.g. to Go) without regressions.",
+  "scripts": {
+    "test": "node --test --test-concurrency=1"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

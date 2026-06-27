@@ -1,0 +1,17 @@
+# Go
+/bin/
+*.test
+
+# Node
+node_modules/
+web/dist/
+
+# npm CLI: per-platform binaries are assembled by CI (npm/build.sh), not committed
+npm/loft-cli-*/bin/
+
+# Local dev volumes (docker-compose creates these at runtime; never published)
+/dev/
+
+# Env
+.env
+.DS_Store

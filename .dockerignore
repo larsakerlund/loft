@@ -1,0 +1,7 @@
+web/
+test/
+dev/
+bin/
+.git/
+node_modules/
+*.md

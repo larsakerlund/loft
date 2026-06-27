@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+/* Loft palette and motion, exposed as Tailwind tokens (bg-accent, text-ink, animate-pop, ...). */
+@theme {
+  --color-ink: #15151a;
+  --color-muted: #6b7280;
+  --color-line: #e3e5ea;
+  --color-accent: #4f46e5;
+  --color-go: #16a34a;
+  --color-overwrite: #d97706;
+  --color-canvas: #f4f5f7;
+  --color-canvas-drag: #eef0ff;
+
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --animate-pop: pop 0.12s ease-out;
+  @keyframes pop {
+    from {
+      opacity: 0;
+      transform: translateY(4px) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+/* The graph-paper backdrop (lines only; the page sets the background color so it can tint on drag). */
+@utility grid-bg {
+  background-image:
+    linear-gradient(var(--color-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--color-line) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+/* The soft card elevation shared by every panel. */
+@utility card-shadow {
+  box-shadow:
+    0 1px 2px rgba(21, 21, 26, 0.06),
+    0 12px 32px rgba(21, 21, 26, 0.08);
+}

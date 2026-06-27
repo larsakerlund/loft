@@ -1,0 +1,98 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+# Strict but pragmatic. The "standard" set (errcheck, govet, ineffassign, staticcheck, unused) plus
+# a curated set that catches the bugs that matter for a long-lived backend: unchecked HTTP bodies,
+# error-wrapping mistakes, context misuse, and security smells. Complexity, length, and
+# documentation budgets keep the code reviewable as it grows.
+linters:
+  default: standard
+  enable:
+    - bodyclose      # every HTTP response body must be closed
+    - errorlint      # use errors.Is/As and %w, not == / %v
+    - gocognit       # cap cognitive complexity (how hard a function is to read)
+    - gocritic       # opinionated correctness/style/perf checks
+    - gocyclo        # cap cyclomatic complexity (number of independent paths)
+    - godot          # comments (incl. doc comments) end with a period
+    - funlen         # cap function length in lines and statements
+    - gosec          # security smells
+    - misspell
+    - nilerr         # don't return nil after checking err != nil
+    - noctx          # don't make HTTP requests without a context
+    - revive         # golint successor
+    - unconvert      # redundant type conversions
+    - unparam        # unused function parameters/results
+    - wastedassign
+  settings:
+    gocyclo:
+      # Cyclomatic complexity above this many independent paths gets flagged; 15 is the
+      # widely used default that catches genuinely branchy functions without nagging.
+      min-complexity: 15
+    gocognit:
+      # Cognitive complexity weights nesting heavier than raw branching, so it tracks
+      # readability rather than path count; 20 leaves headroom over gocyclo's 15.
+      min-complexity: 20
+    funlen:
+      # Functions longer than this are hard to hold in your head and usually want splitting.
+      lines: 80
+      statements: 50
+      # Comment and blank lines don't count toward the length budget.
+      ignore-comments: true
+    godot:
+      # Only enforce trailing periods on declaration (doc) comments, not every inline note.
+      scope: declarations
+      capital: false
+    revive:
+      rules:
+        - name: exported
+          # Flag exported symbols missing a doc comment; require it to begin with the symbol name.
+          arguments:
+            - checkPrivateReceivers
+            - sayRepetitiveInsteadOfStutters
+        - name: error-strings
+        - name: error-return
+        - name: context-as-argument
+        - name: unreachable-code
+        - name: indent-error-flow
+        - name: superfluous-else
+        # Exported funcs/methods must not return an unexported type the caller can't name.
+        - name: unexported-return
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+        - style
+      disabled-checks:
+        # Config structs are intentionally passed by value to constructors at startup; the copy is
+        # one-time and keeps call sites immutable.
+        - hugeParam
+    gosec:
+      excludes:
+        # Loft's local-dev upload backend writes static web ASSETS that a separate nginx worker must
+        # read and serve, so they're intentionally group/other-readable. (Prod writes to Blob.)
+        - G301
+        - G306
+  exclusions:
+    rules:
+      # Test helper spawns subprocesses by design; gosec's subprocess audit is noise there.
+      - path: _test\.go
+        linters:
+          - gosec
+      # Tests favor readability over length/complexity budgets; table tests and fixtures
+      # routinely trip funlen and the complexity caps without indicating real problems.
+      - path: _test\.go
+        linters:
+          - funlen
+          - gocyclo
+          - gocognit
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/larsakerlund/loft

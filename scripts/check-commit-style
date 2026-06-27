@@ -1,0 +1,59 @@
+#!/bin/sh
+# Project-specific prose policy for commit messages. Structural rules (grammar,
+# subject length, blank line, body wrap) are handled by gitlint; this covers the
+# parts no off-the-shelf hook does: no process/meta talk, no em or en dashes, no
+# AI-tell wording, and an imperative subject.
+# Run by pre-commit as a commit-msg hook (the message file is passed as $1).
+set -eu
+
+MSG_FILE="${1:?commit message file path required}"
+TYPES='feat|fix|perf|refactor|docs|test|style|build|ci|deps|chore|revert'
+
+first=$(sed -n '1p' "$MSG_FILE")
+case "$first" in
+	"Merge "*|"Revert "*|"Reapply "*|"fixup!"*|"squash!"*|"amend!"*) exit 0 ;;
+esac
+
+WORK=$(mktemp)
+trap 'rm -f "$WORK"' EXIT
+awk '/^# -+ >8 -+/ { exit } /^#/ { next } { print }' "$MSG_FILE" >"$WORK"
+body=$(cat "$WORK")
+
+fail() {
+	echo "commit-msg: $1" >&2
+	echo "  see CLAUDE.md / CONTRIBUTING.md" >&2
+	exit 1
+}
+
+subject=$(awk 'NF { print; exit }' "$WORK")
+
+# Scopes are not used yet (no approved scope list), so reject any "(scope)".
+printf '%s' "$subject" | grep -Eq "^(${TYPES})\(" &&
+	fail "do not use a scope; write '<type>: ...' (no scopes are approved yet)" || true
+
+# Imperative subject: reject common past-tense and gerund leading words.
+desc=$(printf '%s' "$subject" | sed -E "s/^(${TYPES})!?: //")
+firstword=$(printf '%s' "$desc" | awk '{ print tolower($1) }')
+case "$firstword" in
+added | adds | adding | fixed | fixes | fixing | updated | updates | updating | \
+	changed | changes | changing | removed | removes | removing | created | creates | \
+	creating | implemented | implements | implementing | refactored | refactoring | \
+	deleted | deletes | deleting | moved | moving | renamed | renaming | bumped | \
+	bumping | introduced | introduces | introducing)
+	fail "use imperative mood ('add', not '$firstword')" ;;
+esac
+
+# No process or meta-information anywhere in the message.
+meta=$(printf '%s' "$body" | grep -Eio 'owasp|cwe-[0-9]|cve-[0-9]|vulnerabilit[a-z]*|remediat[a-z]*|audit[a-z]*|roadmap|sprint|milestone|ultracode' | head -n1 || true)
+[ -z "$meta" ] || fail "drop meta/process talk ('$meta'); describe the change, not the work"
+
+# No em or en dashes.
+case "$body" in
+*—* | *–*) fail "no em or en dashes; use a comma, colon, or rewrite" ;;
+esac
+
+# No AI-tell wording.
+tell=$(printf '%s' "$body" | grep -Eio "delve|leverage|seamless[a-z]*|robust|comprehensive|cutting.edge|game.chang[a-z]*|unleash|elevate|it'?s worth noting|in conclusion" | head -n1 || true)
+[ -z "$tell" ] || fail "avoid AI-tell wording ('$tell'); write plainly"
+
+exit 0

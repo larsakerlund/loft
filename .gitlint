@@ -1,0 +1,15 @@
+# Structural commit-message rules. Prose policy (meta words, dashes, AI-tells,
+# imperative mood, no scope) lives in scripts/check-commit-style. See CLAUDE.md.
+[general]
+contrib=contrib-title-conventional-commits
+# Allow short, body-less commits (e.g. "docs: fix a typo").
+ignore=body-is-missing
+
+[title-max-length]
+line-length=72
+
+[body-max-line-length]
+line-length=72
+
+[contrib-title-conventional-commits]
+types=feat,fix,perf,refactor,docs,test,style,build,ci,deps,chore,revert

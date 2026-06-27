@@ -1,0 +1,20 @@
+{
+  "name": "loft-cli-darwin-x64",
+  "version": "0.1.0",
+  "description": "Prebuilt loft CLI binary for darwin/x64.",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "bin"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/larsakerlund/loft.git",
+    "directory": "npm/loft-cli-darwin-x64"
+  }
+}

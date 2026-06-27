@@ -1,0 +1,34 @@
+# Managed by pre-commit (https://pre-commit.com). See CLAUDE.md / CONTRIBUTING.md.
+# Enable once per clone:  pre-commit install
+default_install_hook_types: [pre-commit, commit-msg]
+
+repos:
+  # Commit-message structure: Conventional Commits grammar, subject length,
+  # blank line, body wrap, trailing punctuation.
+  - repo: https://github.com/jorisroovers/gitlint
+    rev: v0.19.1
+    hooks:
+      - id: gitlint
+
+  # Go formatting.
+  - repo: https://github.com/dnephin/pre-commit-golang
+    rev: v0.5.1
+    hooks:
+      - id: go-fmt
+
+  # General hygiene.
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=25600]
+
+  # Project-specific prose policy that no off-the-shelf hook covers.
+  - repo: local
+    hooks:
+      - id: commit-style
+        name: commit message prose policy
+        entry: scripts/check-commit-style
+        language: script
+        stages: [commit-msg]
