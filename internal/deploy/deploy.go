@@ -2,15 +2,19 @@
 // chosen subdomain to be served as static files. The write is staged in a temp dir then mirrored over
 // the old site, so a site is never served half-deployed.
 //
-// Both the browser console and the `loft` CLI deploy here. Two gates keep this from becoming a way
+// Both the browser console and the `loft` CLI deploy here. Three gates keep this from becoming a way
 // for one hosted site to publish over others (the flat-trust model authorizes every user for
 // every site, so the only boundary that matters here is WHERE the call originates):
-//   - origin: the request must come from the apex (X-Loft-Site = _apex), never a hosted site.
-//   - browser CSRF: a browser deploy must be same-origin (the Origin host equals the request host),
-//     so a hosted site cannot drive the user's cookie-bearing browser into a cross-origin POST
-//     (multipart is preflight-exempt, so CORS alone would not stop the request reaching us). The CLI
-//     is not a browser and carries no ambient cookie; it proves intent with X-Loft-Deploy-Client,
-//     which a cross-origin page cannot set without a CORS preflight loftd never grants.
+//   - origin: the request must come from the apex (X-Loft-Site = _apex, set by the proxy from the
+//     validated hostname and never client-settable), never a hosted site.
+//   - fetch metadata: Sec-Fetch-Site must be same-origin, none, or absent. Browsers always send this
+//     and page script cannot forge or strip it, so a deploy driven from any other origin (same-site
+//     subdomain or cross-site) is refused regardless of CORS. This is the load-bearing defense against
+//     a hosted site emulating the CLI.
+//   - browser CSRF: a browser deploy must additionally be same-origin (the Origin host equals the
+//     request host). The CLI is not a browser and carries no ambient cookie or fetch metadata; it
+//     proves intent with X-Loft-Deploy-Client, which a cross-origin page cannot set without a CORS
+//     preflight loftd never grants.
 package deploy
 
 import (
@@ -83,6 +87,18 @@ func deployAllowed(r *http.Request) (string, bool) {
 	if web.Site(r) != "_apex" {
 		return "deploy is only available from the console or the CLI", false
 	}
+	// Fetch-metadata backstop. Browsers always send Sec-Fetch-Site and page script can neither forge
+	// nor remove it, so a deploy driven from a hosted site is same-site or cross-site and is refused
+	// here. Only a same-origin browser request (the console), a top-level navigation, or a non-browser
+	// client (the CLI, which sends no Sec-Fetch-Site) gets through. This does not depend on loftd
+	// withholding CORS headers, so it holds even if a proxy later adds permissive CORS.
+	switch r.Header.Get("Sec-Fetch-Site") {
+	case "", "none", "same-origin":
+	default: // same-site, cross-site
+		return "cross-origin deploy refused", false
+	}
+	// The console is same-origin; the CLI proves intent with X-Loft-Deploy-Client, which a cross-origin
+	// page cannot set without a CORS preflight loftd never grants.
 	if !sameOrigin(r) && r.Header.Get("X-Loft-Deploy-Client") == "" {
 		return "cross-origin deploy refused", false
 	}

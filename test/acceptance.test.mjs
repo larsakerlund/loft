@@ -283,6 +283,19 @@ describe("deploy + delete", () => {
     const r = await t.req("POST", "/api/deploy", { site: "hosted", headers: cli, raw: siteForm("x") });
     assert.equal(r.status, 403);
   });
+
+  it("refuses a hosted site emulating the CLI (Sec-Fetch-Site backstop)", async () => {
+    // A page on another origin always carries a browser Sec-Fetch-Site it cannot forge or remove, so
+    // even if it manages to send the CLI header the deploy is refused.
+    for (const sfs of ["cross-site", "same-site"]) {
+      const r = await t.req("POST", "/api/deploy", { ...apex, headers: { ...cli, "Sec-Fetch-Site": sfs }, raw: siteForm("x") });
+      assert.equal(r.status, 403, `Sec-Fetch-Site: ${sfs} must be refused`);
+    }
+    // A same-origin browser request (the console) is allowed.
+    const ok = await t.req("POST", "/api/deploy", { ...apex, headers: { ...cli, "Sec-Fetch-Site": "same-origin" }, raw: siteForm("sfsok") });
+    assert.equal(ok.status, 200);
+    await t.req("DELETE", "/api/deploy?site=sfsok", { ...apex, headers: cli });
+  });
 });
 
 describe("realtime", () => {
