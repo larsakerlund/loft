@@ -31,12 +31,17 @@ services:
       - LOFT_PG_CONNECTION_STRING=postgres://loft:loft@postgres:5432/loft?sslmode=disable
       - LOFT_CLI_CLIENT_ID=local-cli
       - LOFT_CLI_SCOPE=openid offline_access
+      # loft.ai points at llmock (the LLM emulator) in OpenAI-compatible mode, so chat works offline.
+      - LOFT_AI_ENDPOINT=http://llmock:8080/openai/v1/
+      - LOFT_AI_MODEL=dev-model
+      - LOFT_AI_KEY=local
       # LOFT_SITES_DIR defaults to /mnt/loft (the mount below), so a deploy lands there.
     volumes:
       - ./dev/sites:/mnt/loft
       - ./dev/uploads:/mnt/uploads
     depends_on:
       - postgres
+      - llmock
 
   postgres:
     image: postgres:16-alpine
@@ -45,3 +50,11 @@ services:
       - POSTGRES_PASSWORD=loft
       - POSTGRES_DB=loft
     # No host port publish: loftd reaches Postgres over the compose network (postgres:5432).
+
+  # LLM emulator: OpenAI-compatible responses so loft.ai works with no real provider. Uses the same
+  # fixtures as the test suite but NOT in deterministic mode, so dev gets realistic streaming latency.
+  llmock:
+    image: ghcr.io/larsakerlund/llmock:latest
+    command: ["--fixtures", "/fixtures.yaml"]
+    volumes:
+      - ./test/llmock.fixtures.yaml:/fixtures.yaml:ro
