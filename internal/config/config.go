@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"strconv"
+	"strings"
 )
 
 // Config is loftd's fully-resolved runtime configuration.
@@ -54,8 +55,9 @@ type Config struct {
 	OIDCIssuer         string // OIDC issuer URL; empty ⇒ derived from TenantID (Entra) if that is set
 	TenantID           string // Entra tenant id, a convenience to derive the issuer; ignored if OIDCIssuer is set
 	APIAudience        string // the Loft API id (access-token aud); empty ⇒ token validation off
-	APIScope           string // required delegated scope on the access token (default access_as_user)
-	AuthorizedClientID string // if set, the access token's azp/appid must equal this (the auth proxy's client)
+	APIScope           string // the full delegated scope (data, uploads, AI, realtime); default access_as_user
+	DeployScope        string // optional reduced scope: a token carrying it may deploy + whoami but not reach data/AI/realtime (the CLI's least privilege). Empty ⇒ only APIScope is honored.
+	AuthorizedClientID string // if set, the token's azp/appid must be one of these (comma-separated: the auth proxy, plus any other client)
 	Dev                bool   // LOCAL DEV ONLY: auth off, identity from DevUser. Refused unless opted in.
 	DevUser            string // "email|name|id" used in dev mode; defaults to a local user
 
@@ -90,6 +92,7 @@ func Load() Config {
 		TenantID:           os.Getenv("LOFT_TENANT_ID"),
 		APIAudience:        os.Getenv("LOFT_API_AUDIENCE"),
 		APIScope:           env("LOFT_API_SCOPE", "access_as_user"),
+		DeployScope:        os.Getenv("LOFT_DEPLOY_SCOPE"),
 		AuthorizedClientID: os.Getenv("LOFT_AUTHORIZED_CLIENT_ID"),
 		Dev:                envBool("LOFT_DEV"),
 		DevUser:            os.Getenv("LOFT_DEV_USER"),
@@ -117,6 +120,20 @@ func (c Config) OIDCIssuerURL() string {
 		return "https://login.microsoftonline.com/" + c.TenantID + "/v2.0"
 	}
 	return ""
+}
+
+// AuthorizedClientIDs is the set of OAuth client apps loftd accepts tokens from: the token's azp/appid
+// must be one of these. Comma-separated, so both a browser session (via the auth proxy) and the CLI
+// (its own client) can be authorized. Empty means the pin is off (audience + scope alone gate the
+// token); setting it does not depend on, and is independent of, the discovery CLIClientID.
+func (c Config) AuthorizedClientIDs() []string {
+	var ids []string
+	for s := range strings.SplitSeq(c.AuthorizedClientID, ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			ids = append(ids, s)
+		}
+	}
+	return ids
 }
 
 // Validate rejects dangerous misconfigurations at startup. In particular, access-token validation

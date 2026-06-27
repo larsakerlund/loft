@@ -296,6 +296,20 @@ describe("deploy + delete", () => {
     assert.equal(ok.status, 200);
     await t.req("DELETE", "/api/deploy?site=sfsok", { ...apex, headers: cli });
   });
+
+  it("a deploy-scoped token (the CLI) may whoami + deploy, but not touch data/AI", async () => {
+    const dep = { scope: t.deployScope }; // mint a token with the reduced deploy scope
+    // Allowed: identity + deploy/remove.
+    assert.equal((await t.req("GET", "/api/me", dep)).status, 200);
+    const pub = await t.req("POST", "/api/deploy", { ...apex, ...dep, headers: cli, raw: siteForm("scopetest") });
+    assert.equal(pub.status, 200);
+    assert.equal((await t.req("DELETE", "/api/deploy?site=scopetest", { ...apex, ...dep, headers: cli })).status, 200);
+    // Refused (403, wrong scope): the data, AI, upload, and realtime endpoints.
+    assert.equal((await t.req("POST", "/api/db/notes", { ...dep, body: { x: 1 } })).status, 403);
+    assert.equal((await t.req("GET", "/api/db/notes", dep)).status, 403);
+    assert.equal((await t.req("POST", "/api/ai/chat", { ...dep, body: { messages: [{ role: "user", content: "hi" }] } })).status, 403);
+    assert.equal((await t.req("POST", "/api/upload", { ...dep, raw: new FormData() })).status, 403);
+  });
 });
 
 describe("realtime", () => {

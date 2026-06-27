@@ -8,11 +8,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"regexp"
+	"slices"
 
 	"github.com/larsakerlund/loft/internal/identity"
 )
 
 type ctxKey struct{}
+type scopeKey struct{}
 
 var nonLabel = regexp.MustCompile(`[^a-z0-9-]+`)
 
@@ -34,12 +36,14 @@ var nonLabel = regexp.MustCompile(`[^a-z0-9-]+`)
 // the data-scoping that this model leans on.
 func Auth(r *identity.Resolver, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		user, ok := r.UserFromHeaders(req.Context(), req.Header)
+		user, scopes, ok := r.UserFromHeaders(req.Context(), req.Header)
 		if !ok {
 			Error(w, http.StatusUnauthorized, "not authenticated")
 			return
 		}
-		next.ServeHTTP(w, req.WithContext(context.WithValue(req.Context(), ctxKey{}, user)))
+		ctx := context.WithValue(req.Context(), ctxKey{}, user)
+		ctx = context.WithValue(ctx, scopeKey{}, scopes)
+		next.ServeHTTP(w, req.WithContext(ctx))
 	})
 }
 
@@ -48,6 +52,20 @@ func Auth(r *identity.Resolver, next http.Handler) http.Handler {
 func User(ctx context.Context) (identity.User, bool) {
 	u, ok := ctx.Value(ctxKey{}).(identity.User)
 	return u, ok
+}
+
+// RequireScope gates a handler on the caller's token carrying `scope`: a credential without it (the
+// CLI's deploy-only token, which lacks the full API scope) gets 403. Wrap it INSIDE Auth, which puts
+// the scopes in the context. An empty scope is a no-op (scope enforcement off).
+func RequireScope(scope string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		scopes, _ := req.Context().Value(scopeKey{}).([]string)
+		if scope != "" && !slices.Contains(scopes, scope) {
+			Error(w, http.StatusForbidden, "this credential is not allowed to use this endpoint")
+			return
+		}
+		next.ServeHTTP(w, req)
+	})
 }
 
 // Site is the calling tenant. It is taken ONLY from the X-Loft-Site header, which the ingress proxy

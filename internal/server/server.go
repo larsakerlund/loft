@@ -33,29 +33,34 @@ func New(ctx context.Context, cfg config.Config) (*Server, error) {
 	hub := realtime.NewHub()
 	mux := http.NewServeMux()
 	auth := func(h http.Handler) http.Handler { return web.Auth(resolver, h) }
+	// full gates a route on the complete API scope (data, uploads, AI, realtime). A reduced-scope
+	// credential like the CLI (deploy + whoami only) lacks it and is refused with 403, so a deploy
+	// token cannot read or write tenant data. deploy and /api/me stay on auth alone, which the deploy
+	// scope satisfies.
+	full := func(h http.Handler) http.Handler { return auth(web.RequireScope(cfg.APIScope, h)) }
 	s := &Server{hub: hub}
 
 	// loft.db
 	switch pool, err := db.NewPool(ctx, cfg); {
 	case errors.Is(err, db.ErrNotConfigured):
-		mux.Handle("/api/db/", auth(stub(http.StatusNotImplemented, "db not configured")))
+		mux.Handle("/api/db/", full(stub(http.StatusNotImplemented, "db not configured")))
 	case err != nil:
 		return nil, err
 	default:
 		store := db.New(pool, hub.PublishDb)
 		s.warm = append(s.warm, store.Init)
-		mux.Handle("/api/db/subscribe", auth(hub.SubscribeHandler()))
-		mux.Handle("/api/db/", auth(store.Handler()))
+		mux.Handle("/api/db/subscribe", full(hub.SubscribeHandler()))
+		mux.Handle("/api/db/", full(store.Handler()))
 	}
 
 	// loft.upload
 	switch up, err := uploads.New(cfg); {
 	case errors.Is(err, uploads.ErrNotConfigured):
-		mux.Handle("/api/upload", auth(stub(http.StatusInternalServerError, "uploads not configured")))
+		mux.Handle("/api/upload", full(stub(http.StatusInternalServerError, "uploads not configured")))
 	case err != nil:
 		return nil, err
 	default:
-		mux.Handle("/api/upload", auth(up.Handler()))
+		mux.Handle("/api/upload", full(up.Handler()))
 	}
 
 	// loft deploy: POST publishes a site, DELETE removes one. Gated to the apex origin (the root site or
@@ -65,10 +70,10 @@ func New(ctx context.Context, cfg config.Config) (*Server, error) {
 	// loft.ai (the handler itself reports 501 when the endpoint isn't configured)
 	aiSvc := ai.New(cfg)
 	s.warm = append(s.warm, aiSvc.Init)
-	mux.Handle("POST /api/ai/chat", auth(aiSvc.Handler()))
+	mux.Handle("POST /api/ai/chat", full(aiSvc.Handler()))
 
 	// loft.socket + identity
-	mux.Handle("/api/socket", auth(hub.SocketHandler()))
+	mux.Handle("/api/socket", full(hub.SocketHandler()))
 	mux.Handle("GET /api/me", auth(http.HandlerFunc(meHandler)))
 
 	// CLI discovery: public (no auth), so `loft login <url>` configures itself from the URL alone.

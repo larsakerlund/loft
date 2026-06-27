@@ -106,6 +106,7 @@ async function startIdP() {
   const jwk = { ...publicKey.export({ format: "jwk" }), kid, use: "sig", alg: "RS256" };
   const audience = "loft-api";
   const scope = "access_as_user";
+  const deployScope = "site.deploy"; // the reduced scope the CLI uses: deploy + whoami, no data access
   let issuer = "";
   const server = http.createServer((req, res) => {
     res.setHeader("content-type", "application/json");
@@ -127,14 +128,14 @@ async function startIdP() {
   });
   const port = await new Promise((r) => server.listen(0, "127.0.0.1", () => r(server.address().port)));
   issuer = `http://127.0.0.1:${port}`;
-  const mint = (email, id, name) => {
+  const mint = (email, id, name, tokenScope = scope) => {
     const now = Math.floor(Date.now() / 1000);
     const head = b64url(JSON.stringify({ alg: "RS256", typ: "JWT", kid }));
-    const body = b64url(JSON.stringify({ iss: issuer, aud: audience, exp: now + 3600, iat: now, oid: id, email, name, scp: scope }));
+    const body = b64url(JSON.stringify({ iss: issuer, aud: audience, exp: now + 3600, iat: now, oid: id, email, name, scp: tokenScope }));
     const sig = b64url(crypto.sign("RSA-SHA256", Buffer.from(`${head}.${body}`), privateKey));
     return `${head}.${body}.${sig}`;
   };
-  return { issuer, audience, scope, mint, close: () => server.close() };
+  return { issuer, audience, scope, deployScope, mint, close: () => server.close() };
 }
 
 // --- the whole stack ---
@@ -178,6 +179,7 @@ export async function setup() {
       // Real OIDC validation against the mock IdP: every request carries a signed Bearer.
       LOFT_OIDC_ISSUER: idp.issuer,
       LOFT_API_AUDIENCE: idp.audience,
+      LOFT_DEPLOY_SCOPE: idp.deployScope, // the reduced scope; tokens with it may deploy + whoami only
     };
     const [cmd, ...args] = cmdParts;
     const child = spawn(cmd, args, { env, stdio: ["ignore", "pipe", "pipe"] });
@@ -209,15 +211,15 @@ export async function setup() {
   }
 }
 
-// HTTP/WS helpers that inject the proxy's identity + tenant headers. site → X-Loft-Site (the trusted
-// tenant header nginx sets from the validated server name); user → the X-Forwarded-User id (the
-// immutable identity key). Tests run with no OIDC issuer configured, so loftd honors these fallbacks.
+// HTTP/WS helpers that inject the tenant header plus a signed Bearer, mirroring what the proxy
+// forwards in production. site → X-Loft-Site (the trusted tenant header nginx sets from the validated
+// server name). user/id → the identity minted into the token (oid = the immutable identity key).
 function makeContext(baseUrl, port, uploadsDir, idp) {
-  const idHeaders = ({ site = "sitea", user = "alice", id, anon = false } = {}) => {
+  const idHeaders = ({ site = "sitea", user = "alice", id, anon = false, scope } = {}) => {
     const h = { "X-Loft-Site": site };
-    // The proxy forwards a validated access token; the suite mints one per request (oid = the stable
-    // identity key). anon → no token, exercising the 401 paths.
-    if (!anon) h["Authorization"] = `Bearer ${idp.mint(`${user}@test`, id ?? user, user)}`;
+    // The proxy forwards a validated access token; the suite mints one per request. anon → no token
+    // (exercises the 401 paths); scope → mint a reduced-scope token (e.g. the CLI's deploy-only token).
+    if (!anon) h["Authorization"] = `Bearer ${idp.mint(`${user}@test`, id ?? user, user, scope)}`;
     return h;
   };
 
@@ -256,5 +258,5 @@ function makeContext(baseUrl, port, uploadsDir, idp) {
     };
   }
 
-  return { baseUrl, uploadsDir, req, openWs };
+  return { baseUrl, uploadsDir, req, openWs, deployScope: idp.deployScope };
 }

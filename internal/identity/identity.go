@@ -11,6 +11,7 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 
@@ -47,8 +48,10 @@ func NewResolver(cfg config.Config) *Resolver {
 //
 // There is no header/proxy-trust fallback: a deployment authenticates with bearer tokens (the proxy
 // forwards the validated access token), so loftd never derives identity from spoofable request
-// headers. The bool is false when no identity can be established.
-func (r *Resolver) UserFromHeaders(ctx context.Context, h http.Header) (User, bool) {
+// headers. It also returns the token's delegated scopes, which the caller uses to gate capabilities
+// (data access needs the full scope; a reduced-scope credential like the CLI does not have it). The
+// bool is false when no identity can be established.
+func (r *Resolver) UserFromHeaders(ctx context.Context, h http.Header) (User, []string, bool) {
 	if raw, ok := bearer(h.Get("Authorization")); ok {
 		return r.validate(ctx, raw)
 	}
@@ -70,26 +73,28 @@ func (r *Resolver) UserFromHeaders(ctx context.Context, h http.Header) (User, bo
 		if len(parts) > 2 && parts[2] != "" {
 			id = parts[2]
 		}
-		return User{Email: email, Name: name, ID: id}, true
+		// Dev is full local access: grant the full scope so it clears every capability gate.
+		return User{Email: email, Name: name, ID: id}, []string{r.cfg.APIScope}, true
 	}
-	return User{}, false
+	return User{}, nil, false
 }
 
-// validate verifies an OIDC access token issued for the Loft API. Returns false (rejecting the
-// request) on any problem, including a missing required scope.
-func (r *Resolver) validate(ctx context.Context, raw string) (User, bool) {
+// validate verifies an OIDC access token issued for the Loft API and returns the user plus the
+// token's delegated scopes. Returns ok=false (rejecting the request) on any problem, including a
+// token that carries none of the scopes loftd recognizes.
+func (r *Resolver) validate(ctx context.Context, raw string) (User, []string, bool) {
 	if r.issuer == "" || r.cfg.APIAudience == "" {
-		return User{}, false // not configured to validate ⇒ don't trust the token
+		return User{}, nil, false // not configured to validate ⇒ don't trust the token
 	}
 	verifier, err := r.getVerifier(ctx)
 	if err != nil {
 		log.Printf("loftd: oidc provider init failed: %v", err)
-		return User{}, false
+		return User{}, nil, false
 	}
 	tok, err := verifier.Verify(ctx, raw)
 	if err != nil {
 		log.Printf("loftd: access-token verify failed: %v", err)
-		return User{}, false
+		return User{}, nil, false
 	}
 	var c struct {
 		Email             string `json:"email"`
@@ -103,38 +108,34 @@ func (r *Resolver) validate(ctx context.Context, raw string) (User, bool) {
 		Appid             string `json:"appid"` // same, on v1-style tokens
 	}
 	if err := tok.Claims(&c); err != nil {
-		return User{}, false
+		return User{}, nil, false
 	}
-	// Require the delegated scope, so a token for the API obtained without it is rejected. The scope
-	// claim is `scp` on Entra, `scope` on standard OIDC providers; accept either.
-	if !hasScope(c.Scp+" "+c.Scope, r.cfg.APIScope) {
-		log.Printf("loftd: access token missing required scope %q", r.cfg.APIScope)
-		return User{}, false
+	// The token must carry a scope loftd recognizes (the full scope, or the reduced deploy scope when
+	// one is configured), so a token for the API obtained without any is rejected. Per-endpoint
+	// capability (data needs the full scope) is enforced by the caller from the scopes returned here.
+	// The scope claim is `scp` on Entra, `scope` on standard OIDC providers; accept either.
+	scopes := strings.Fields(c.Scp + " " + c.Scope)
+	if r.cfg.APIScope != "" && !slices.Contains(scopes, r.cfg.APIScope) &&
+		!(r.cfg.DeployScope != "" && slices.Contains(scopes, r.cfg.DeployScope)) {
+		log.Printf("loftd: access token carries no recognized scope (want %q or %q)", r.cfg.APIScope, r.cfg.DeployScope)
+		return User{}, nil, false
 	}
 	// Pin the calling client: audience alone lets any tenant app that obtains the scope call us.
-	// When configured, the token's azp/appid must equal the configured authorized client id.
-	if r.cfg.AuthorizedClientID != "" && firstNonEmpty(c.Azp, c.Appid) != r.cfg.AuthorizedClientID {
-		log.Printf("loftd: access token from unauthorized client party %q", firstNonEmpty(c.Azp, c.Appid))
-		return User{}, false
+	// When configured, the token's azp/appid must be one of the authorized clients (the auth proxy
+	// and the CLI). This lets a browser session (via the proxy) and the CLI (its own client) both in.
+	if ids := r.cfg.AuthorizedClientIDs(); len(ids) > 0 {
+		azp := firstNonEmpty(c.Azp, c.Appid)
+		if !slices.Contains(ids, azp) {
+			log.Printf("loftd: access token from unauthorized client party %q", azp)
+			return User{}, nil, false
+		}
 	}
 	email := firstNonEmpty(c.Email, c.PreferredUsername)
 	if email == "" {
-		return User{}, false
+		return User{}, nil, false
 	}
 	// oid is the immutable tenant-wide id; sub (stable per app) is the fallback.
-	return User{Email: email, Name: firstNonEmpty(c.Name, email), ID: firstNonEmpty(c.Oid, c.Sub, email)}, true
-}
-
-func hasScope(scp, want string) bool {
-	if want == "" {
-		return true
-	}
-	for _, s := range strings.Fields(scp) {
-		if s == want {
-			return true
-		}
-	}
-	return false
+	return User{Email: email, Name: firstNonEmpty(c.Name, email), ID: firstNonEmpty(c.Oid, c.Sub, email)}, scopes, true
 }
 
 func (r *Resolver) getVerifier(ctx context.Context) (*oidc.IDTokenVerifier, error) {
