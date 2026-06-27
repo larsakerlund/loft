@@ -60,6 +60,9 @@ forwards, per request:
   There is no header/proxy-trust identity fallback.
 - `X-Loft-Site: <site>` — derived from the hostname by the proxy (the only trusted source); loftd
   scopes every query to it.
+- The browser's `Sec-Fetch-Site` header, **forwarded unchanged** (do not strip it). loftd uses it to
+  refuse a deploy driven from a hosted site, including a same-site subdomain whose session cookie the
+  browser would still send. Stripping it would weaken that protection.
 
 Any standard OIDC provider works, and any authenticating reverse proxy in front (oauth2-proxy is one
 option). Two paths the proxy must leave reachable: `/.well-known/loft` (unauthenticated, for CLI
