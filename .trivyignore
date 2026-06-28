@@ -1,0 +1,3 @@
+# CVEs accepted for the release image scan. The release workflow fails on HIGH/CRITICAL with a fix
+# available; list a CVE id here (one per line, optionally with a trailing comment) to accept one that
+# cannot be fixed yet. Keep the reason next to it so it can be removed when a fix ships.

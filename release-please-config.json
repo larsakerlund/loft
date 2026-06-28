@@ -1,0 +1,59 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "release-type": "simple",
+  "include-component-in-tag": false,
+  "bump-minor-pre-major": true,
+  "bump-patch-for-minor-pre-major": true,
+  "packages": {
+    ".": {
+      "package-name": "loft",
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "npm/loft-cli*/package.json",
+          "glob": true,
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "json",
+          "path": "npm/loft-cli/package.json",
+          "jsonpath": "$.optionalDependencies['loft-cli-darwin-arm64']"
+        },
+        {
+          "type": "json",
+          "path": "npm/loft-cli/package.json",
+          "jsonpath": "$.optionalDependencies['loft-cli-darwin-x64']"
+        },
+        {
+          "type": "json",
+          "path": "npm/loft-cli/package.json",
+          "jsonpath": "$.optionalDependencies['loft-cli-linux-x64']"
+        },
+        {
+          "type": "json",
+          "path": "npm/loft-cli/package.json",
+          "jsonpath": "$.optionalDependencies['loft-cli-linux-arm64']"
+        },
+        {
+          "type": "json",
+          "path": "npm/loft-cli/package.json",
+          "jsonpath": "$.optionalDependencies['loft-cli-win32-x64']"
+        }
+      ]
+    }
+  },
+  "changelog-sections": [
+    { "type": "feat", "section": "Features" },
+    { "type": "fix", "section": "Bug Fixes" },
+    { "type": "perf", "section": "Performance" },
+    { "type": "refactor", "section": "Refactoring" },
+    { "type": "deps", "section": "Dependencies" },
+    { "type": "build", "section": "Build" },
+    { "type": "docs", "section": "Documentation" },
+    { "type": "revert", "section": "Reverts" },
+    { "type": "ci", "section": "CI", "hidden": true },
+    { "type": "test", "section": "Tests", "hidden": true },
+    { "type": "style", "section": "Styles", "hidden": true },
+    { "type": "chore", "section": "Chores", "hidden": true }
+  ]
+}
