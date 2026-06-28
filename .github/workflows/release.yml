@@ -71,7 +71,7 @@ jobs:
   # it is temporary and goes away with the move to OIDC below.
   npm:
     needs: setup
-    if: ${{ needs.setup.result == 'success' }}
+    if: ${{ always() && needs.setup.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -125,7 +125,7 @@ jobs:
   # digests into one tagged multi-arch manifest per image.
   docker-build:
     needs: setup
-    if: ${{ needs.setup.result == 'success' }}
+    if: ${{ always() && needs.setup.result == 'success' }}
     runs-on: ${{ matrix.runner }}
     strategy:
       # One arch or image failing should not cancel the others mid-publish.
@@ -223,7 +223,7 @@ jobs:
   # major.minor, major, latest), and attest its provenance.
   docker-merge:
     needs: [setup, docker-build]
-    if: ${{ needs.setup.result == 'success' }}
+    if: ${{ always() && needs.setup.result == 'success' && needs.docker-build.result == 'success' }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
