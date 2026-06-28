@@ -18,8 +18,8 @@ loft delete blog
 ```
 
 `loft deploy` checks the folder locally and uploads it; the site is live at a subdomain of the
-platform. For CI, set `LOFT_TOKEN` to a bearer token instead of running `login`. No Loft to deploy to
-yet? See [Run your own](#run-your-own).
+platform. Or skip the CLI entirely: open the platform in a browser and drag a folder onto the page to
+deploy it. No Loft to deploy to yet? See [Run your own](#run-your-own).
 
 ## Build the app
 
