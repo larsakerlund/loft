@@ -1,4 +1,4 @@
-# Backend image: loftd alone, the API daemon. A reverse proxy in front (see web/ for a local one,
+# Backend image (loft): the loftd daemon alone, the API. A reverse proxy in front (see web/ for a local one,
 # or your own gateway) handles ingress and auth. loftd is a single static Go binary, so this stays
 # tiny and cold-starts fast.
 #
@@ -6,7 +6,7 @@
 # not trusted-open: loftd validates the forwarded access token itself (audience + scope + azp), so
 # the API stays closed even to an internal caller.
 #
-# Build context is the repo root: docker build -t loftd .
+# Build context is the repo root: docker build -t loft .
 
 FROM golang:1.26.4-alpine AS build
 WORKDIR /src

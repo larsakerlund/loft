@@ -23,7 +23,7 @@ endpoint. Azure bindings (Blob, managed identity) are optional, not required.
 
 Each release publishes two images to GHCR:
 
-- `ghcr.io/larsakerlund/loftd`: the API daemon.
+- `ghcr.io/larsakerlund/loft`: the API daemon (loftd).
 - `ghcr.io/larsakerlund/loft-web`: the root site and static file server (also the local-dev proxy).
 
 ## Configuration

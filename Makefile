@@ -26,9 +26,9 @@ cli-dist:
 # Needs Docker and trivy. DOCKER_HOST is taken from the active docker context so it works on macOS
 # (Docker Desktop) as well as Linux.
 scan:
-	docker build -t loftd:scan .
+	docker build -t loft:scan .
 	docker build -t loft-web:scan ./web
-	DOCKER_HOST="$$(docker context inspect -f '{{.Endpoints.docker.Host}}')" trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 loftd:scan
+	DOCKER_HOST="$$(docker context inspect -f '{{.Endpoints.docker.Host}}')" trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 loft:scan
 	DOCKER_HOST="$$(docker context inspect -f '{{.Endpoints.docker.Host}}')" trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 loft-web:scan
 
 clean:

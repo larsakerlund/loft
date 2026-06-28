@@ -7,15 +7,26 @@ name: release
 #
 # The publish jobs run as dependent jobs here rather than on a release event, because a release
 # created by the default GITHUB_TOKEN cannot trigger a separate `on: release` workflow.
+#
+# workflow_dispatch re-publishes an existing tag (for example to retry a transient failure or to ship
+# an image/packaging change without cutting a new version). The npm publish skips versions already on
+# npm, so a re-publish only fills in what is missing.
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)publish, e.g. v0.1.1"
+        required: true
+        type: string
 
 # No blanket permissions; each job requests only what it needs.
 permissions: {}
 
 jobs:
   release-please:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -23,9 +34,6 @@ jobs:
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
-      version: ${{ steps.release.outputs.version }}
-      major: ${{ steps.release.outputs.major }}
-      minor: ${{ steps.release.outputs.minor }}
     steps:
       - id: release
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
@@ -33,12 +41,36 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
-  # Cross-compile the CLI for every platform, stamp the release version into the binaries and the npm
-  # package.jsons, and publish loft-cli plus its per-platform packages. The NPM_TOKEN secret is used
-  # directly (no protected environment); it is temporary and goes away with the move to OIDC below.
-  npm:
+  # Resolve the tag and version for both triggers: a freshly cut release (push) or a manual re-publish
+  # (workflow_dispatch). Everything downstream keys off these outputs, so it does not care which one
+  # fired. Runs only when there is something to publish.
+  setup:
     needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
+    if: ${{ !cancelled() && (needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.r.outputs.tag }}
+      version: ${{ steps.r.outputs.version }}
+      major: ${{ steps.r.outputs.major }}
+      minor: ${{ steps.r.outputs.minor }}
+    steps:
+      - id: r
+        env:
+          TAG: ${{ github.event.inputs.tag || needs.release-please.outputs.tag_name }}
+        run: |
+          v="${TAG#v}"
+          {
+            echo "tag=$TAG"
+            echo "version=$v"
+            echo "major=${v%%.*}"
+            echo "minor=$(printf '%s' "$v" | cut -d. -f2)"
+          } >> "$GITHUB_OUTPUT"
+
+  # Cross-compile the CLI for every platform, stamp the version into the binaries, and publish loft-cli
+  # plus its per-platform packages. The NPM_TOKEN secret is used directly (no protected environment);
+  # it is temporary and goes away with the move to OIDC below.
+  npm:
+    needs: setup
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -46,6 +78,7 @@ jobs:
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
+          ref: ${{ needs.setup.outputs.tag }}
           persist-credentials: false
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
@@ -58,23 +91,23 @@ jobs:
       # stamps the version into the binary.
       - name: cross-compile the CLI
         env:
-          TAG: ${{ needs.release-please.outputs.tag_name }}
+          TAG: ${{ needs.setup.outputs.tag }}
         run: LOFT_VERSION="$TAG" ./npm/build.sh
       # Auth is the NPM_TOKEN secret for now. Trusted publishing (OIDC) needs each package to already
-      # exist with a trusted publisher configured, so the first release has to run on the token to
-      # create them. To switch afterward: configure a trusted publisher on npmjs.com for each of the
-      # six packages (repo larsakerlund/loft, workflow release.yml), then delete the NODE_AUTH_TOKEN
-      # line below and the NPM_TOKEN secret. id-token: write above already covers OIDC, and --provenance
-      # stays. Trusted publishing wants npm >= 11.5.1, so add an `npm i -g npm@latest` step if the
-      # bundled npm is older.
+      # exist with a trusted publisher configured. To switch: configure a trusted publisher on
+      # npmjs.com for each of the six packages (repo larsakerlund/loft, workflow release.yml), then
+      # delete the NODE_AUTH_TOKEN line below and the NPM_TOKEN secret. id-token: write above already
+      # covers OIDC, and --provenance stays. Trusted publishing wants npm >= 11.5.1, so add an
+      # `npm i -g npm@latest` step if the bundled npm is older.
       # Platform packages first, so the wrapper's optionalDependencies resolve once it is published.
       - name: publish to npm
         env:
           # No protected environment by choice; the token is short-lived (removed at the OIDC switch).
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} # zizmor: ignore[secrets-outside-env]
         run: |
-          # Skip any version already on npm, so re-running this job after a partial failure publishes
-          # only what is missing instead of aborting on the first already-published package.
+          # Skip any version already on npm, so re-running this job after a partial failure (or a
+          # manual re-publish) publishes only what is missing instead of aborting on the first
+          # already-published package.
           for dir in npm/loft-cli-* npm/loft-cli; do
             name=$(node -p "require('./$dir/package.json').name")
             version=$(node -p "require('./$dir/package.json').version")
@@ -90,19 +123,19 @@ jobs:
   # the slow part), scan it, and push it to GHCR by digest only. docker-merge stitches the per-arch
   # digests into one tagged multi-arch manifest per image.
   docker-build:
-    needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
+    needs: setup
+    runs-on: ${{ matrix.runner }}
     strategy:
       # One arch or image failing should not cancel the others mid-publish.
       fail-fast: false
       matrix:
         include:
-          - image: loftd
+          - image: loft
             context: .
             dockerfile: Dockerfile
             platform: linux/amd64
             runner: ubuntu-24.04
-          - image: loftd
+          - image: loft
             context: .
             dockerfile: Dockerfile
             platform: linux/arm64
@@ -117,7 +150,6 @@ jobs:
             dockerfile: web/Dockerfile
             platform: linux/arm64
             runner: ubuntu-24.04-arm
-    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
@@ -128,6 +160,7 @@ jobs:
         run: echo "PLATFORM_PAIR=${PLATFORM//\//-}" >> "$GITHUB_ENV"
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
+          ref: ${{ needs.setup.outputs.tag }}
           persist-credentials: false
       - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
       - uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
@@ -187,12 +220,11 @@ jobs:
   # Combine the per-arch digests for each image into one multi-arch manifest, tag it (exact version,
   # major.minor, major, latest), and attest its provenance.
   docker-merge:
-    needs: [release-please, docker-build]
-    if: needs.release-please.outputs.release_created == 'true'
+    needs: [setup, docker-build]
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        image: [loftd, loft-web]
+        image: [loft, loft-web]
     permissions:
       contents: read
       packages: write
@@ -215,9 +247,9 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
           tags: |
-            type=raw,value=${{ needs.release-please.outputs.version }}
-            type=raw,value=${{ needs.release-please.outputs.major }}.${{ needs.release-please.outputs.minor }}
-            type=raw,value=${{ needs.release-please.outputs.major }}
+            type=raw,value=${{ needs.setup.outputs.version }}
+            type=raw,value=${{ needs.setup.outputs.major }}.${{ needs.setup.outputs.minor }}
+            type=raw,value=${{ needs.setup.outputs.major }}
             type=raw,value=latest
       - name: create and push the multi-arch manifest
         working-directory: ${{ runner.temp }}/digests
@@ -233,7 +265,7 @@ jobs:
         name: read the manifest digest
         env:
           REPO: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
-          VERSION: ${{ needs.release-please.outputs.version }}
+          VERSION: ${{ needs.setup.outputs.version }}
         run: |
           digest=$(docker buildx imagetools inspect "$REPO:$VERSION" \
             --format '{{json .Manifest}}' | jq -r '.digest')
