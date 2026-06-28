@@ -33,3 +33,11 @@ The full rules for commit messages, code comments, and writing style live in
 
 The Go conventions are in [CLAUDE.md](CLAUDE.md); the TypeScript client SDK keeps its own rules in
 the separate `loft-js` repo.
+
+## Releases
+
+Releases are automated from the commit history, which is why the commit grammar matters.
+[release-please](https://github.com/googleapis/release-please) keeps a release PR open on `main` that
+collects the `feat`/`fix`/etc. commits and proposes the next version. Merging it tags the release,
+updates `CHANGELOG.md`, and publishes the images (GHCR) and the `loft-cli` packages (npm). Do not edit
+`CHANGELOG.md` by hand; it is generated.
