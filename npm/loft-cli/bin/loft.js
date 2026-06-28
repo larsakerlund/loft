@@ -10,7 +10,7 @@ const path = require("node:path");
 
 const platform = process.platform; // darwin | linux | win32
 const arch = process.arch; // arm64 | x64
-const pkg = `loft-cli-${platform}-${arch}`;
+const pkg = `@larsakerlund/loft-cli-${platform}-${arch}`;
 const exe = platform === "win32" ? "loft.exe" : "loft";
 
 let binary;

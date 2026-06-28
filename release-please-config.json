@@ -17,27 +17,27 @@
         {
           "type": "json",
           "path": "npm/loft-cli/package.json",
-          "jsonpath": "$.optionalDependencies['loft-cli-darwin-arm64']"
+          "jsonpath": "$.optionalDependencies['@larsakerlund/loft-cli-darwin-arm64']"
         },
         {
           "type": "json",
           "path": "npm/loft-cli/package.json",
-          "jsonpath": "$.optionalDependencies['loft-cli-darwin-x64']"
+          "jsonpath": "$.optionalDependencies['@larsakerlund/loft-cli-darwin-x64']"
         },
         {
           "type": "json",
           "path": "npm/loft-cli/package.json",
-          "jsonpath": "$.optionalDependencies['loft-cli-linux-x64']"
+          "jsonpath": "$.optionalDependencies['@larsakerlund/loft-cli-linux-x64']"
         },
         {
           "type": "json",
           "path": "npm/loft-cli/package.json",
-          "jsonpath": "$.optionalDependencies['loft-cli-linux-arm64']"
+          "jsonpath": "$.optionalDependencies['@larsakerlund/loft-cli-linux-arm64']"
         },
         {
           "type": "json",
           "path": "npm/loft-cli/package.json",
-          "jsonpath": "$.optionalDependencies['loft-cli-win32-x64']"
+          "jsonpath": "$.optionalDependencies['@larsakerlund/loft-cli-win32-x64']"
         }
       ]
     }

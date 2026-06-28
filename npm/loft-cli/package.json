@@ -21,10 +21,10 @@
     "hosting"
   ],
   "optionalDependencies": {
-    "loft-cli-darwin-arm64": "0.1.0",
-    "loft-cli-darwin-x64": "0.1.0",
-    "loft-cli-linux-x64": "0.1.0",
-    "loft-cli-linux-arm64": "0.1.0",
-    "loft-cli-win32-x64": "0.1.0"
+    "@larsakerlund/loft-cli-darwin-arm64": "0.1.0",
+    "@larsakerlund/loft-cli-darwin-x64": "0.1.0",
+    "@larsakerlund/loft-cli-linux-x64": "0.1.0",
+    "@larsakerlund/loft-cli-linux-arm64": "0.1.0",
+    "@larsakerlund/loft-cli-win32-x64": "0.1.0"
   }
 }
