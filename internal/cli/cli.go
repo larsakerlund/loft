@@ -19,6 +19,10 @@ var ErrUsage = errors.New("usage")
 
 const brand = "loft"
 
+// version is the CLI version, set at build time with -ldflags "-X
+// github.com/larsakerlund/loft/internal/cli.version=<tag>". It is "dev" for an unstamped local build.
+var version = "dev"
+
 // Run dispatches a CLI invocation. It returns ErrUsage for an unknown command, nil for help/success.
 func Run(ctx context.Context, args []string) error {
 	cmd := ""
@@ -34,6 +38,9 @@ func Run(ctx context.Context, args []string) error {
 		return runLogin(ctx, args[1:])
 	case "whoami":
 		return runWhoami(ctx, args[1:])
+	case "version", "--version", "-v":
+		fmt.Printf("%s %s\n", brand, version)
+		return nil
 	case "", "help", "-h", "--help":
 		usage()
 		return nil

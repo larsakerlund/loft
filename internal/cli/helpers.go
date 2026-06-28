@@ -22,10 +22,12 @@ Usage:
         Remove a site. Asks you to type the site name to confirm (irreversible).
   %s whoami [--url URL]
         Show the identity you are signed in as.
+  %s version
+        Print the CLI version.
 
 The platform URL comes from --url, LOFT_URL, or the saved login. For CI, set LOFT_TOKEN
 to a bearer token instead of running login.
-`, brand, brand, brand, brand, brand)
+`, brand, brand, brand, brand, brand, brand)
 }
 
 func ask(question string) string {

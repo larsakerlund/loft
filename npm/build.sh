@@ -2,10 +2,15 @@
 # Cross-compile the loft CLI for every published platform and drop each binary into its package's
 # bin/. CI runs this before `npm publish`-ing the wrapper (loft-cli) and the per-platform packages.
 # The binaries are gitignored; only the package.json files are tracked.
+#
+# Pass a version (or set LOFT_VERSION) to stamp it into the binary (`loft version`); defaults to
+# "dev" for a local build.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 repo="$(cd "$here/.." && pwd)"
+version="${1:-${LOFT_VERSION:-dev}}"
+ldflags="-s -w -X github.com/larsakerlund/loft/internal/cli.version=$version"
 
 # package suffix : GOOS : GOARCH   (npm os/cpu on the left, Go's on the right)
 targets=(
@@ -22,6 +27,6 @@ for t in "${targets[@]}"; do
   out="$here/loft-cli-$suffix/bin/$exe"
   echo "building $suffix ($goos/$goarch) -> $out"
   ( cd "$repo" && GOOS="$goos" GOARCH="$goarch" CGO_ENABLED=0 \
-      go build -trimpath -ldflags="-s -w" -o "$out" ./cmd/loft )
+      go build -trimpath -ldflags="$ldflags" -o "$out" ./cmd/loft )
 done
-echo "done."
+echo "done (version $version)."
