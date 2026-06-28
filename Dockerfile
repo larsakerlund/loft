@@ -16,8 +16,10 @@ COPY cmd/ ./cmd/
 COPY internal/ ./internal/
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /loftd ./cmd/loftd
 
-FROM alpine:3.20
-RUN apk add --no-cache ca-certificates
+FROM alpine:3.22
+# Pull the latest alpine security patches on top of the base image, so a CVE fixed in the package
+# repo but not yet in a base rebuild does not ship. Scanned in CI (and locally) before release.
+RUN apk upgrade --no-cache && apk add --no-cache ca-certificates
 COPY --from=build /loftd /usr/local/bin/loftd
 
 ENV LOFT_LISTEN=0.0.0.0:8082

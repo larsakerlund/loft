@@ -1,5 +1,5 @@
 # Loft build targets. Go builds directly; the web app and CLI npm packaging shell out.
-.PHONY: build daemon cli web test cli-dist clean
+.PHONY: build daemon cli web test cli-dist scan clean
 
 # Build the daemon and CLI binaries into bin/.
 build: daemon cli
@@ -21,6 +21,15 @@ test:
 # Cross-compile the CLI for every platform into the npm/ packages, ready to publish loft-cli.
 cli-dist:
 	./npm/build.sh
+
+# Build both images and scan them for fixable HIGH/CRITICAL vulnerabilities. Run before a release.
+# Needs Docker and trivy. DOCKER_HOST is taken from the active docker context so it works on macOS
+# (Docker Desktop) as well as Linux.
+scan:
+	docker build -t loftd:scan .
+	docker build -t loft-web:scan ./web
+	DOCKER_HOST="$$(docker context inspect -f '{{.Endpoints.docker.Host}}')" trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 loftd:scan
+	DOCKER_HOST="$$(docker context inspect -f '{{.Endpoints.docker.Host}}')" trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 loft-web:scan
 
 clean:
 	rm -rf bin npm/loft-cli-*/bin

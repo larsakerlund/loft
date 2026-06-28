@@ -14,7 +14,10 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm run build
 
-FROM nginx:1.27-alpine
+FROM nginx:1.29-alpine
+# Pull the latest alpine security patches on top of the base image, so a CVE fixed in the package
+# repo but not yet in a base rebuild does not ship. Scanned in CI (and locally) before release.
+RUN apk upgrade --no-cache
 ENV LOFT_DOMAIN=localhost
 COPY nginx.conf /etc/nginx/templates/default.conf.template
 COPY sys/ /usr/share/nginx/__loft-sys/
