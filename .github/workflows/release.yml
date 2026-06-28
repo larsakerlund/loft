@@ -94,17 +94,14 @@ jobs:
         env:
           TAG: ${{ needs.setup.outputs.tag }}
         run: LOFT_VERSION="$TAG" ./npm/build.sh
-      # Auth is the NPM_TOKEN secret for now. Trusted publishing (OIDC) needs each package to already
-      # exist with a trusted publisher configured. To switch: configure a trusted publisher on
-      # npmjs.com for each of the six packages (repo larsakerlund/loft, workflow release.yml), then
-      # delete the NODE_AUTH_TOKEN line below and the NPM_TOKEN secret. id-token: write above already
-      # covers OIDC, and --provenance stays. Trusted publishing wants npm >= 11.5.1, so add an
-      # `npm i -g npm@latest` step if the bundled npm is older.
+      # Trusted publishing (OIDC): each package has a trusted publisher configured on npm for this repo
+      # and this workflow, so no token is involved. id-token: write above mints the OIDC token npm
+      # exchanges with the registry, and --provenance attaches the attestation. Trusted publishing
+      # needs npm >= 11.5.1, so upgrade before publishing.
+      - name: ensure a recent npm for trusted publishing
+        run: npm install --global npm@latest
       # Platform packages first, so the wrapper's optionalDependencies resolve once it is published.
       - name: publish to npm
-        env:
-          # No protected environment by choice; the token is short-lived (removed at the OIDC switch).
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} # zizmor: ignore[secrets-outside-env]
         run: |
           # Skip any version already on npm, so re-running this job after a partial failure (or a
           # manual re-publish) publishes only what is missing instead of aborting on the first
