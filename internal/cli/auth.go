@@ -66,7 +66,7 @@ func saveCredentials(c credentials) error {
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(c, "", "  ")
+	data, err := json.MarshalIndent(c, "", "  ") //nolint:gosec // G117: the credentials file holds the OAuth token by design, written 0600 below
 	if err != nil {
 		return err
 	}
@@ -109,11 +109,12 @@ func discoverConfig(ctx context.Context, base string) (cliConfig, error) {
 	if u.Scheme != "https" && !isLocalHost(u.Hostname()) {
 		return c, fmt.Errorf("refusing to discover config over plain HTTP from %s (use https)", u.Host)
 	}
+	//nolint:gosec // G704: the CLI fetches the platform URL the user gives it; a client CLI has no SSRF surface
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String()+"/.well-known/loft", http.NoBody)
 	if err != nil {
 		return c, err
 	}
-	resp, err := ctlClient.Do(req)
+	resp, err := ctlClient.Do(req) //nolint:gosec // G704: request to the user-provided platform URL, see above
 	if err != nil {
 		return c, fmt.Errorf("reaching %s: %w", u.Host, err)
 	}
@@ -206,11 +207,12 @@ func deviceLogin(ctx context.Context, issuer, clientID, scope string) (string, e
 func discover(ctx context.Context, issuer string) (oidcMetadata, error) {
 	var m oidcMetadata
 	wellKnown := strings.TrimRight(issuer, "/") + "/.well-known/openid-configuration"
+	//nolint:gosec // G704: discovery request to the user-provided OIDC issuer; no SSRF surface in a CLI
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, wellKnown, http.NoBody)
 	if err != nil {
 		return m, err
 	}
-	resp, err := ctlClient.Do(req)
+	resp, err := ctlClient.Do(req) //nolint:gosec // G704: discovery request to the user-provided OIDC issuer, see above
 	if err != nil {
 		return m, err
 	}

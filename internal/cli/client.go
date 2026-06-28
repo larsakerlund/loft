@@ -48,6 +48,7 @@ func newClient(base, token string) *loftClient {
 }
 
 func (c *loftClient) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
+	//nolint:gosec // G704: the CLI talks to the platform URL the user configured; a client CLI has no SSRF surface
 	req, err := http.NewRequestWithContext(ctx, method, c.base+path, body)
 	if err != nil {
 		return nil, err
@@ -159,7 +160,7 @@ func (c *loftClient) me(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	resp, err := c.http.Do(req)
+	resp, err := c.http.Do(req) //nolint:gosec // G704: request to the user-configured platform URL, see newRequest
 	if err != nil {
 		return "", fmt.Errorf("reaching %s: %w", c.base, err)
 	}

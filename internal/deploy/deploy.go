@@ -114,12 +114,12 @@ func (s *Service) remove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dest := filepath.Join(s.dir, site)
-	if _, err := os.Stat(dest); err != nil { // #nosec G706 -- site is SanitizeLabel'd
+	if _, err := os.Stat(dest); err != nil { //nolint:gosec // G703: site is SanitizeLabel'd before Join, so dest stays under the sites root
 		web.Error(w, http.StatusNotFound, "no such site")
 		return
 	}
-	if err := os.RemoveAll(dest); err != nil { // #nosec G703 -- dest under the sites root
-		log.Printf("loftd deploy delete failed (site=%q): %v", site, err) // #nosec G706 -- site is SanitizeLabel'd and %q-escaped
+	if err := os.RemoveAll(dest); err != nil { //nolint:gosec // G703: site is SanitizeLabel'd before Join, so dest stays under the sites root
+		log.Printf("loftd deploy delete failed (site=%q): %v", site, err) //nolint:gosec // G706: site is SanitizeLabel'd and %q-escaped
 		web.Error(w, http.StatusInternalServerError, "delete failed")
 		return
 	}
