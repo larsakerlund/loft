@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>No site here yet</title>
+  <style>
+    body { font-family: system-ui, sans-serif; display: grid; place-items: center; height: 100vh; margin: 0; text-align: center; }
+    a { display: inline-block; margin-top: 1rem; padding: .6rem 1.1rem; background: #1a73e8; color: #fff; border-radius: 6px; text-decoration: none; }
+    code { background: #f1f3f4; padding: .1rem .3rem; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>No site at <code id="site">this URL</code> yet</h1>
+    <p>This URL is free. Want to put something here?</p>
+    <a id="create" href="/">Create this site →</a>
+  </main>
+  <script>
+    const host = location.hostname;
+    document.getElementById("site").textContent = host.split(".")[0];
+    // Console lives at the apex (the host minus the site label).
+    const apex = host.split(".").slice(1).join(".") || host;
+    document.getElementById("create").href =
+      location.protocol + "//" + apex + (location.port ? ":" + location.port : "");
+  </script>
+</body>
+</html>

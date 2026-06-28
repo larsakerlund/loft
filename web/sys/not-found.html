@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Page not found</title>
+  <style>
+    body { font-family: system-ui, sans-serif; display: grid; place-items: center; height: 100vh; margin: 0; text-align: center; }
+    code { background: #f1f3f4; padding: .1rem .3rem; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Page not found</h1>
+    <p>Nothing at this path on <code id="site">this site</code>.<br>
+       Tip: add a <code>404.html</code> to your site to customize this.</p>
+  </main>
+  <script>
+    document.getElementById("site").textContent = location.hostname.split(".")[0];
+  </script>
+</body>
+</html>
