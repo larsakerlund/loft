@@ -129,7 +129,7 @@ func (a *openaiAdapter) params(msgs []Message) openai.ChatCompletionNewParams {
 		}
 	}
 	p := openai.ChatCompletionNewParams{
-		Model:               shared.ChatModel(a.model),
+		Model:               a.model,
 		Messages:            out,
 		MaxCompletionTokens: openai.Int(a.maxTokens),
 	}
@@ -139,6 +139,7 @@ func (a *openaiAdapter) params(msgs []Message) openai.ChatCompletionNewParams {
 	return p
 }
 
+// Complete sends the conversation and returns the assistant's full reply with token usage.
 func (a *openaiAdapter) Complete(ctx context.Context, msgs []Message) (Completion, error) {
 	resp, err := a.client.Chat.Completions.New(ctx, a.params(msgs))
 	if err != nil {
@@ -151,11 +152,13 @@ func (a *openaiAdapter) Complete(ctx context.Context, msgs []Message) (Completio
 	}}
 	if len(resp.Choices) > 0 {
 		c.Content = resp.Choices[0].Message.Content
-		c.FinishReason = string(resp.Choices[0].FinishReason)
+		c.FinishReason = resp.Choices[0].FinishReason
 	}
 	return c, nil
 }
 
+// Stream sends the conversation and calls onDelta for each token as it arrives, returning the final
+// token usage and finish reason once the stream completes.
 func (a *openaiAdapter) Stream(ctx context.Context, msgs []Message, onDelta func(string) error) (Usage, string, error) {
 	p := a.params(msgs)
 	p.StreamOptions = openai.ChatCompletionStreamOptionsParam{IncludeUsage: openai.Bool(true)}
@@ -171,7 +174,7 @@ func (a *openaiAdapter) Stream(ctx context.Context, msgs []Message, onDelta func
 				}
 			}
 			if fr := chunk.Choices[0].FinishReason; fr != "" {
-				finish = string(fr)
+				finish = fr
 			}
 		}
 		if chunk.Usage.TotalTokens > 0 {

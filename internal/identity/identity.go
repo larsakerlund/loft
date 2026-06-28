@@ -116,7 +116,7 @@ func (r *Resolver) validate(ctx context.Context, raw string) (User, []string, bo
 	// The scope claim is `scp` on Entra, `scope` on standard OIDC providers; accept either.
 	scopes := strings.Fields(c.Scp + " " + c.Scope)
 	if r.cfg.APIScope != "" && !slices.Contains(scopes, r.cfg.APIScope) &&
-		!(r.cfg.DeployScope != "" && slices.Contains(scopes, r.cfg.DeployScope)) {
+		(r.cfg.DeployScope == "" || !slices.Contains(scopes, r.cfg.DeployScope)) {
 		log.Printf("loftd: access token carries no recognized scope (want %q or %q)", r.cfg.APIScope, r.cfg.DeployScope)
 		return User{}, nil, false
 	}

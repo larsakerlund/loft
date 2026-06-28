@@ -44,6 +44,8 @@ type azureMICredential struct {
 	cred azcore.TokenCredential
 }
 
+// Password returns a fresh Entra access token to use as the Postgres password. It is called per new
+// connection, so a rotating managed-identity credential stays current.
 func (a *azureMICredential) Password(ctx context.Context) (string, error) {
 	tok, err := a.cred.GetToken(ctx, policy.TokenRequestOptions{Scopes: []string{pgScope}})
 	if err != nil {

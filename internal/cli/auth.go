@@ -52,7 +52,10 @@ func loadCredentials() (credentials, error) {
 	if err != nil {
 		return c, err
 	}
-	return c, json.Unmarshal(data, &c)
+	if err := json.Unmarshal(data, &c); err != nil {
+		return c, err
+	}
+	return c, nil
 }
 
 func saveCredentials(c credentials) error {
@@ -118,7 +121,10 @@ func discoverConfig(ctx context.Context, base string) (cliConfig, error) {
 	if resp.StatusCode != http.StatusOK {
 		return c, fmt.Errorf("%s does not advertise CLI config (HTTP %d)", u.Host, resp.StatusCode)
 	}
-	return c, json.NewDecoder(resp.Body).Decode(&c)
+	if err := json.NewDecoder(resp.Body).Decode(&c); err != nil {
+		return c, err
+	}
+	return c, nil
 }
 
 // requireSecure rejects a non-HTTPS OAuth endpoint (except for local development), so an access token
@@ -212,7 +218,10 @@ func discover(ctx context.Context, issuer string) (oidcMetadata, error) {
 	if resp.StatusCode != http.StatusOK {
 		return m, fmt.Errorf("OIDC discovery at %s returned %d", wellKnown, resp.StatusCode)
 	}
-	return m, json.NewDecoder(resp.Body).Decode(&m)
+	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
+		return m, err
+	}
+	return m, nil
 }
 
 func startDeviceAuth(ctx context.Context, endpoint, clientID, scope string) (deviceAuth, error) {
@@ -255,7 +264,10 @@ func pollToken(ctx context.Context, endpoint, clientID string, da deviceAuth) (s
 				return t, err
 			}
 			defer func() { _ = resp.Body.Close() }()
-			return t, json.NewDecoder(resp.Body).Decode(&t)
+			if err := json.NewDecoder(resp.Body).Decode(&t); err != nil {
+				return t, err
+			}
+			return t, nil
 		}()
 		if err != nil {
 			return "", err
