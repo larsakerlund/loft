@@ -17,7 +17,7 @@ Usage:
         the CLI discovers the OAuth settings from it and signs you in via the device flow.
   %s deploy [path] [name] [--force] [--url URL]
         Upload a folder to a site. Path defaults to the current dir; the site name is
-        the 2nd argument (or --name), defaulting to the folder name.
+        the 2nd argument, defaulting to the folder name.
   %s delete <name> [--force] [--url URL]
         Remove a site. Asks you to type the site name to confirm (irreversible).
   %s whoami [--url URL]

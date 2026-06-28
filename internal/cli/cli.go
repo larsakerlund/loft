@@ -73,7 +73,7 @@ func runDeploy(ctx context.Context, args []string) error {
 		return err
 	}
 	_, force := flags["force"]
-	name := sanitizeSite(firstNonEmpty(flags["name"], at(pos, 1), filepath.Base(dir)))
+	name := sanitizeSite(firstNonEmpty(at(pos, 1), filepath.Base(dir)))
 
 	// Validate locally before any network/auth, so bad input fails instantly with every reason.
 	entries, err := collect(dir)
@@ -120,7 +120,7 @@ func deployWithConfirm(ctx context.Context, client *loftClient, name string, ent
 
 func runDelete(ctx context.Context, args []string) error {
 	pos, flags := parseArgs(args)
-	name := sanitizeSite(firstNonEmpty(flags["name"], at(pos, 0)))
+	name := sanitizeSite(at(pos, 0))
 	if name == "" {
 		return errors.New("usage: loft delete <name>")
 	}
