@@ -73,8 +73,16 @@ jobs:
           # No protected environment by choice; the token is short-lived (removed at the OIDC switch).
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }} # zizmor: ignore[secrets-outside-env]
         run: |
+          # Skip any version already on npm, so re-running this job after a partial failure publishes
+          # only what is missing instead of aborting on the first already-published package.
           for dir in npm/loft-cli-* npm/loft-cli; do
-            echo "publishing $dir"
+            name=$(node -p "require('./$dir/package.json').name")
+            version=$(node -p "require('./$dir/package.json').version")
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "$name@$version already published, skipping"
+              continue
+            fi
+            echo "publishing $name@$version"
             ( cd "$dir" && npm publish --access public --provenance )
           done
 
@@ -85,7 +93,8 @@ jobs:
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
     strategy:
-      fail-fast: true
+      # One arch or image failing should not cancel the others mid-publish.
+      fail-fast: false
       matrix:
         include:
           - image: loftd
