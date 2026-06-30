@@ -21,6 +21,7 @@ import (
 	"errors"
 	"io"
 	"log"
+	"mime"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -215,7 +216,7 @@ func stageFile(staging string, part *multipart.Part, out *staged) *userError {
 	if out.site == "" || out.site == "_apex" {
 		return &userError{http.StatusBadRequest, "site name must come before the files"}
 	}
-	rel := cleanRelPath(part.FileName())
+	rel := cleanRelPath(partPath(part))
 	if rel == "" {
 		return nil // a part with no usable path (e.g. an empty dir entry)
 	}
@@ -327,6 +328,17 @@ func writeFile(staging, rel string, part *multipart.Part, remaining int64) (int6
 		return 0, errors.New("deploy exceeds the size limit")
 	}
 	return n, nil
+}
+
+// partPath is the upload's relative path WITHIN the site, read from the raw Content-Disposition
+// filename. We deliberately do NOT use part.FileName(): it applies filepath.Base per RFC 7578 §4.2,
+// collapsing every nested file (assets/app.js -> app.js) into the site root and breaking any build
+// with subdirectories. Honoring the directory path is the point here — directory uploads are how both
+// the CLI and the browser FormData idiom send a site. A parse error yields "", which stageFile skips;
+// cleanRelPath still strips ".." so this stays traversal-safe.
+func partPath(part *multipart.Part) string {
+	_, params, _ := mime.ParseMediaType(part.Header.Get("Content-Disposition"))
+	return params["filename"]
 }
 
 // cleanRelPath reduces a part filename to a safe forward-slash relative path, dropping any "."/".."
