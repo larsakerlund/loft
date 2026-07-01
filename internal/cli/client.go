@@ -37,14 +37,64 @@ type loftClient struct {
 	base  string
 	token string
 	http  *http.Client
+	// refresh renews an expired access token on a 401 and returns the new bearer, given the token the
+	// request was rejected with. It is nil for the LOFT_TOKEN and auth-off paths; the closure (built in
+	// auth.go) owns reading and writing credentials, so this file stays storage-agnostic.
+	refresh func(ctx context.Context, failingToken string) (string, error)
 }
 
-func newClient(base, token string) *loftClient {
+func newClient(base, token string, refresh func(ctx context.Context, failingToken string) (string, error)) *loftClient {
 	return &loftClient{
-		base:  strings.TrimRight(base, "/"),
-		token: token,
-		http:  &http.Client{Timeout: 5 * time.Minute},
+		base:    strings.TrimRight(base, "/"),
+		token:   token,
+		http:    &http.Client{Timeout: 5 * time.Minute},
+		refresh: refresh,
 	}
+}
+
+// send builds a request with build and sends it, wrapping a transport failure with the target so the
+// user sees which host was unreachable.
+func (c *loftClient) send(build func() (*http.Request, error)) (*http.Response, error) {
+	req, err := build()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.http.Do(req) //nolint:gosec // G704: request to the user-configured platform URL, see newRequest
+	if err != nil {
+		return nil, fmt.Errorf("reaching %s: %w", c.base, err)
+	}
+	return resp, nil
+}
+
+// do sends a request and, on a 401 with a refresh available, renews the token once and replays the
+// request once. build is a closure rather than a prebuilt *http.Request because deploy streams its
+// body from a single-use pipe that cannot be replayed; each call rebuilds a fresh body. The single
+// retry is safe for the non-idempotent deploy upload because loftd rejects an expired bearer in auth
+// middleware before consuming the multipart body, so a 401 means nothing was written. At most one
+// retry, so there is no refresh loop.
+func (c *loftClient) do(ctx context.Context, build func() (*http.Request, error)) (*http.Response, error) {
+	resp, err := c.send(build)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusUnauthorized || c.refresh == nil {
+		return resp, nil
+	}
+	// The refresh callback returns a new bearer to replay with, an empty token when the refresh token
+	// is dead (it has cleared the saved credentials itself), or an error for a transient failure. A
+	// dead token surfaces as the original 401, so errorFor emits the not-authenticated message and
+	// points at `loft login`; a transient failure surfaces its own error and leaves credentials intact.
+	token, rerr := c.refresh(ctx, c.token)
+	if rerr != nil {
+		_ = resp.Body.Close()
+		return nil, rerr
+	}
+	if token == "" {
+		return resp, nil
+	}
+	_ = resp.Body.Close()
+	c.token = token
+	return c.send(build)
 }
 
 func (c *loftClient) newRequest(ctx context.Context, method, path string, body io.Reader) (*http.Request, error) {
@@ -84,23 +134,27 @@ type deployResult struct {
 // so a large site is never held whole in memory; the "site" field is written before the files,
 // matching the order the server expects.
 func (c *loftClient) deploy(ctx context.Context, site string, entries []fileEntry, force bool) (deployResult, error) {
-	pr, pw := io.Pipe()
-	mw := multipart.NewWriter(pw)
-	go func() {
-		err := writeMultipart(mw, site, entries, force)
-		_ = mw.Close()
-		_ = pw.CloseWithError(err)
-	}()
+	// Rebuild the pipe, goroutine, and Content-Type on every attempt: the body is single-use, so a
+	// refresh-and-replay in do needs a fresh one, not a rewound reader.
+	build := func() (*http.Request, error) {
+		pr, pw := io.Pipe()
+		mw := multipart.NewWriter(pw)
+		go func() {
+			err := writeMultipart(mw, site, entries, force)
+			_ = mw.Close()
+			_ = pw.CloseWithError(err)
+		}()
+		req, err := c.newRequest(ctx, http.MethodPost, "/api/deploy", pr)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", mw.FormDataContentType())
+		return req, nil
+	}
 
-	req, err := c.newRequest(ctx, http.MethodPost, "/api/deploy", pr)
+	resp, err := c.do(ctx, build)
 	if err != nil {
 		return deployResult{}, err
-	}
-	req.Header.Set("Content-Type", mw.FormDataContentType())
-
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return deployResult{}, fmt.Errorf("reaching %s: %w", c.base, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusConflict {
@@ -139,13 +193,12 @@ func writeMultipart(mw *multipart.Writer, site string, entries []fileEntry, forc
 
 // delete removes a deployed site via DELETE /api/deploy?site=<name>.
 func (c *loftClient) delete(ctx context.Context, site string) error {
-	req, err := c.newRequest(ctx, http.MethodDelete, "/api/deploy?site="+url.QueryEscape(site), http.NoBody)
+	build := func() (*http.Request, error) {
+		return c.newRequest(ctx, http.MethodDelete, "/api/deploy?site="+url.QueryEscape(site), http.NoBody)
+	}
+	resp, err := c.do(ctx, build)
 	if err != nil {
 		return err
-	}
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return fmt.Errorf("reaching %s: %w", c.base, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode/100 != 2 {
@@ -156,13 +209,12 @@ func (c *loftClient) delete(ctx context.Context, site string) error {
 
 // me returns the signed-in user's email from /api/me.
 func (c *loftClient) me(ctx context.Context) (string, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, "/api/me", http.NoBody)
+	build := func() (*http.Request, error) {
+		return c.newRequest(ctx, http.MethodGet, "/api/me", http.NoBody)
+	}
+	resp, err := c.do(ctx, build)
 	if err != nil {
 		return "", err
-	}
-	resp, err := c.http.Do(req) //nolint:gosec // G704: request to the user-configured platform URL, see newRequest
-	if err != nil {
-		return "", fmt.Errorf("reaching %s: %w", c.base, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode/100 != 2 {

@@ -88,7 +88,7 @@ func runDeploy(ctx context.Context, args []string) error {
 	if base == "" {
 		return errors.New("no platform URL: pass --url, set LOFT_URL, or run `loft login`")
 	}
-	client := newClient(base, resolveToken(base))
+	client := newSessionClient(base)
 
 	res, err := deployWithConfirm(ctx, client, name, entries, force)
 	if err != nil {
@@ -133,7 +133,7 @@ func runDelete(ctx context.Context, args []string) error {
 			return errors.New("aborted (name did not match)")
 		}
 	}
-	client := newClient(base, resolveToken(base))
+	client := newSessionClient(base)
 	sp := startSpinner("deleting site")
 	err := client.delete(ctx, name)
 	sp.stop()
@@ -177,22 +177,24 @@ func runLogin(ctx context.Context, args []string) error {
 		return errors.New("could not configure login: pass a platform URL (loft login <url>) that advertises CLI config, or set --issuer/--client-id")
 	}
 
-	token, err := deviceLogin(ctx, issuer, clientID, scope)
+	tok, err := deviceLogin(ctx, issuer, clientID, scope)
 	if err != nil {
 		return err
 	}
 	if err := saveCredentials(credentials{
-		URL:         strings.TrimRight(base, "/"),
-		Issuer:      issuer,
-		ClientID:    clientID,
-		Scope:       scope,
-		AccessToken: token,
+		URL:          strings.TrimRight(base, "/"),
+		Issuer:       issuer,
+		ClientID:     clientID,
+		Scope:        scope,
+		AccessToken:  tok.AccessToken,
+		RefreshToken: tok.RefreshToken,
 	}); err != nil {
 		return err
 	}
 	fmt.Println("✓ logged in")
 	if base != "" {
-		if me, err := newClient(base, token).me(ctx); err == nil {
+		// The bearer is freshly minted, so no refresh wiring is needed for this confirmation call.
+		if me, err := newClient(base, tok.AccessToken, nil).me(ctx); err == nil {
 			fmt.Printf("  signed in as %s\n", me)
 		}
 	}
@@ -205,7 +207,7 @@ func runWhoami(ctx context.Context, args []string) error {
 	if base == "" {
 		return errors.New("no platform URL: pass --url, set LOFT_URL, or run `loft login`")
 	}
-	me, err := newClient(base, resolveToken(base)).me(ctx)
+	me, err := newSessionClient(base).me(ctx)
 	if err != nil {
 		return err
 	}
