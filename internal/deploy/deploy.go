@@ -21,6 +21,7 @@ import (
 	"errors"
 	"io"
 	"log"
+	"mime"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -215,7 +216,7 @@ func stageFile(staging string, part *multipart.Part, out *staged) *userError {
 	if out.site == "" || out.site == "_apex" {
 		return &userError{http.StatusBadRequest, "site name must come before the files"}
 	}
-	rel := cleanRelPath(part.FileName())
+	rel := cleanRelPath(partPath(part))
 	if rel == "" {
 		return nil // a part with no usable path (e.g. an empty dir entry)
 	}
@@ -249,33 +250,54 @@ func mirror(staging, dest string) error {
 		if rel == "." {
 			return nil
 		}
-		target := filepath.Join(dest, rel)
 		staged[rel] = struct{}{}
-		if d.IsDir() {
-			return os.MkdirAll(target, 0o755) // #nosec G703 -- target under dest
-		}
-		return copyFile(p, target)
+		return writeEntry(p, filepath.Join(dest, rel), d.IsDir())
 	})
 	if walkErr != nil {
 		return walkErr
 	}
-	// Drop files the new deploy no longer includes. Best-effort: a stale file the reverse proxy still holds open
-	// can't be removed on some network filesystems, which is harmless (it just lingers) and not worth failing on.
+	prune(dest, staged)
+	return nil
+}
+
+// writeEntry mirrors one staged node (src) onto target. A prior deploy may have left the opposite
+// kind of node in place — a regular file where we now want a directory, or vice versa — and the OS
+// cannot convert one into the other (MkdirAll → ENOTDIR, os.Create → EISDIR), so we drop the
+// conflicting node before creating the replacement.
+func writeEntry(src, target string, isDir bool) error {
+	if fi, lerr := os.Lstat(target); lerr == nil && fi.IsDir() != isDir {
+		if err := os.RemoveAll(target); err != nil { // #nosec G703 G304 -- target under dest
+			return err
+		}
+	}
+	if isDir {
+		return os.MkdirAll(target, 0o755) // #nosec G703 -- target under dest
+	}
+	return copyFile(src, target)
+}
+
+// prune removes everything under dest that the new deploy no longer includes — files and now-unused
+// directories alike, so a folder a later deploy drops does not linger on the shared mount.
+// Best-effort: a node the reverse proxy still holds open can't be removed on some network
+// filesystems, which is harmless (it just lingers) and not worth failing the deploy on.
+func prune(dest string, staged map[string]struct{}) {
 	_ = filepath.WalkDir(dest, func(p string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil //nolint:nilerr // best-effort cleanup: skip entries we can't read
 		}
-		if d.IsDir() {
+		rel, _ := filepath.Rel(dest, p)
+		if rel == "." {
 			return nil
 		}
-		if rel, rerr := filepath.Rel(dest, p); rerr == nil {
-			if _, ok := staged[rel]; !ok {
-				_ = os.Remove(p) // #nosec G122 G304 -- p is under the validated site dir, no symlinks in a deployed tree
-			}
+		if _, ok := staged[rel]; ok {
+			return nil // part of the new deploy — keep it (and descend into kept directories)
+		}
+		_ = os.RemoveAll(p) // #nosec G122 G304 -- p under the validated site dir, no symlinks in a deployed tree
+		if d.IsDir() {
+			return filepath.SkipDir // whole subtree is gone; no need to descend
 		}
 		return nil
 	})
-	return nil
 }
 
 // copyFile writes src over dst (truncating an existing file), creating parent dirs as needed.
@@ -327,6 +349,17 @@ func writeFile(staging, rel string, part *multipart.Part, remaining int64) (int6
 		return 0, errors.New("deploy exceeds the size limit")
 	}
 	return n, nil
+}
+
+// partPath is the upload's relative path WITHIN the site, read from the raw Content-Disposition
+// filename. We deliberately do NOT use part.FileName(): it applies filepath.Base per RFC 7578 §4.2,
+// collapsing every nested file (assets/app.js -> app.js) into the site root and breaking any build
+// with subdirectories. Honoring the directory path is the point here — directory uploads are how both
+// the CLI and the browser FormData idiom send a site. A parse error yields "", which stageFile skips;
+// cleanRelPath still strips ".." so this stays traversal-safe.
+func partPath(part *multipart.Part) string {
+	_, params, _ := mime.ParseMediaType(part.Header.Get("Content-Disposition"))
+	return params["filename"]
 }
 
 // cleanRelPath reduces a part filename to a safe forward-slash relative path, dropping any "."/".."
