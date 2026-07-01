@@ -1,6 +1,6 @@
 {
   "name": "loft-cli",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Deploy apps to a Loft platform: loft login / deploy / delete.",
   "bin": {
     "loft": "bin/loft.js"
@@ -21,10 +21,10 @@
     "hosting"
   ],
   "optionalDependencies": {
-    "@larsakerlund/loft-cli-darwin-arm64": "0.1.1",
-    "@larsakerlund/loft-cli-darwin-x64": "0.1.1",
-    "@larsakerlund/loft-cli-linux-x64": "0.1.1",
-    "@larsakerlund/loft-cli-linux-arm64": "0.1.1",
-    "@larsakerlund/loft-cli-win32-x64": "0.1.1"
+    "@larsakerlund/loft-cli-darwin-arm64": "0.1.2",
+    "@larsakerlund/loft-cli-darwin-x64": "0.1.2",
+    "@larsakerlund/loft-cli-linux-x64": "0.1.2",
+    "@larsakerlund/loft-cli-linux-arm64": "0.1.2",
+    "@larsakerlund/loft-cli-win32-x64": "0.1.2"
   }
 }
