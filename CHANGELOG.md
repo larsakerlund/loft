@@ -5,7 +5,7 @@
 
 ### Features
 
-* renew the access token with a refresh token ([0716738](https://github.com/larsakerlund/loft/commit/0716738f08ddeab3139ed7b0a377ba65ac36a99f))
+* Renew the access token with a refresh token ([0716738](https://github.com/larsakerlund/loft/commit/0716738f08ddeab3139ed7b0a377ba65ac36a99f))
 
 ## [0.1.2](https://github.com/larsakerlund/loft/compare/v0.1.1...v0.1.2) (2026-07-01)
 
